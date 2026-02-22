@@ -87,14 +87,15 @@ class MetabaseAPI {
     try {
       const response = await this.client.get('/api/user/current');
       const u = response.data;
-      const memberships = u.user_group_memberships || [];
+      // Metabase v0.58 returns group_ids (array of ints) on /api/user/current
+      const groupIds = u.group_ids || [];
       return {
         id:       u.id,
         email:    u.email,
         name:     u.common_name || `${u.first_name} ${u.last_name}`.trim(),
         isAdmin:  u.is_superuser,
-        groupIds: memberships.map((g) => g.id),
-        groups:   memberships.map((g) => g.name).filter(Boolean),
+        groupIds,
+        groups:   [], // names not returned by this endpoint; resolved via permissions config
       };
     } catch (error) {
       console.error('Failed to fetch current user:', error);

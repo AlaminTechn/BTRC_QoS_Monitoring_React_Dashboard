@@ -35,7 +35,7 @@ const LoginPage = () => {
   };
 
   const fillAccount = (email) => {
-    form.setFieldsValue({ email, password: 'Test@123' });
+    form.setFieldsValue({ email, password: 'Test@12345' });
   };
 
   return (
@@ -136,7 +136,7 @@ const LoginPage = () => {
           bodyStyle={{ padding: '14px 20px' }}
         >
           <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 10 }}>
-            POC Test Accounts (password: Test@123)
+            POC Test Accounts (password: Test@12345)
           </Text>
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             {TEST_ACCOUNTS.map((acc) => (
