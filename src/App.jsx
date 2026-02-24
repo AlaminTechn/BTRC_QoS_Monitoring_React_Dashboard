@@ -3,16 +3,18 @@
  * Handles authentication via AuthContext and renders LoginPage or Dashboard
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Spin } from 'antd';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import RegulatoryDashboard from './pages/RegulatoryDashboard';
-import LoginPage from './pages/LoginPage';
-import FixedLayout from './components/layout/FixedLayout';
+import MapVisualization    from './pages/MapVisualization';
+import LoginPage           from './pages/LoginPage';
+import FixedLayout         from './components/layout/FixedLayout';
 import './App.css';
 
 const AppContent = () => {
   const { user, loading } = useAuth();
+  const [activePage, setActivePage] = useState('regulatory');
 
   if (loading) {
     return (
@@ -30,8 +32,9 @@ const AppContent = () => {
   }
 
   return (
-    <FixedLayout>
-      <RegulatoryDashboard />
+    <FixedLayout activePage={activePage} onNavigate={setActivePage}>
+      {activePage === 'regulatory'        && <RegulatoryDashboard />}
+      {activePage === 'map-visualization' && <MapVisualization />}
     </FixedLayout>
   );
 };
