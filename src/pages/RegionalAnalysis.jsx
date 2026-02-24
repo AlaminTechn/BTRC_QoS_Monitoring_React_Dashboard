@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Spin, Alert, Breadcrumb, Space, Divider, Button } from 'antd';
 import { HomeOutlined, EnvironmentOutlined, DatabaseOutlined } from '@ant-design/icons';
-import ChoroplethMap from '../components/maps/ChoroplethMap';
+import ChoroplethMap from '../components/maps/ChoroplethMapTiled';
 import BarChart from '../components/charts/BarChart';
 import DataTable from '../components/charts/DataTable';
 import MiniBar from '../components/charts/MiniBar';
@@ -765,6 +765,7 @@ const RegionalAnalysis = ({ startDate = null, endDate = null, lockedDivision = n
                       valueLabel="Violations"
                       onRegionClick={handleDivisionClick}
                       height="500px"
+                      tileStyle="osm"
                     />
                   )}
                 </Card>
@@ -854,6 +855,7 @@ const RegionalAnalysis = ({ startDate = null, endDate = null, lockedDivision = n
                       valueLabel="Avg Download (Mbps)"
                       onRegionClick={handleDistrictClick}
                       height="500px"
+                      tileStyle="osm"
                     />
                   )}
                 </Card>
