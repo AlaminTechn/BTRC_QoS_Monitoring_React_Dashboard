@@ -19,11 +19,17 @@ import {
   NodeIndexOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  GoogleOutlined,
+  RadarChartOutlined,
 } from '@ant-design/icons';
 
 import ChoroplethMap        from '../components/maps/ChoroplethMap';
 import ChoroplethMapECharts from '../components/maps/ChoroplethMapECharts';
 import ChoroplethMapSVG     from '../components/maps/ChoroplethMapSVG';
+import ChoroplethMapGoogle  from '../components/maps/ChoroplethMapGoogle';
+import ChoroplethMapGL      from '../components/maps/ChoroplethMapGL';
+import ReactMapGLGeoJSON    from '../components/maps/ReactMapGLGeoJSON';
+import ReactMapGLCluster    from '../components/maps/ReactMapGLCluster';
 
 // =============================================================================
 // Demo data — 8 Bangladesh divisions, sample ISP violation counts
@@ -139,16 +145,143 @@ const LIBRARIES = {
     ],
     bestFor: 'Print reports, embedded widgets, lightweight SaaS dashboards',
   },
+  mapgl: {
+    key:          'mapgl',
+    name:         'react-map-gl',
+    subtitle:     'MapLibre GL JS · WebGL vector tiles',
+    icon:         <RadarChartOutlined />,
+    color:        '#6d4aff',
+    tagColor:     'purple',
+    npm:          'react-map-gl + maplibre-gl',
+    version:      'v8.1 + v4.7',
+    bundle:       '~350 KB',
+    apiKey:       false,
+    tiles:        true,
+    bangla:       'Native on vector + hybrid tiles',
+    zoomLevel:    'Building (zoom 22)',
+    pros: [
+      'WebGL rendering — handles millions of features at 60 fps',
+      'Free vector tiles via CARTO (no API key)',
+      '5 built-in styles: Light, Streets, Dark, Satellite, Hybrid',
+      'GPU-level feature-state hover (no React re-render)',
+      'MapLibre step expressions for choropleth — zero JS per feature',
+      'Highest zoom level (zoom 22, indoor maps)',
+      'Open-source — no license restrictions (MIT)',
+      'Full camera control: pitch, bearing, 3-D terrain',
+    ],
+    cons: [
+      'Larger setup than Leaflet (Source/Layer/Paint expression API)',
+      'MapLibre expression syntax has a learning curve',
+      'No built-in clustering UI (need separate plugin)',
+      'Satellite style (ESRI) has attribution requirements',
+    ],
+    bestFor: 'High-performance dashboards, 3-D maps, government open-source deployments',
+  },
+  geojson: {
+    key:          'geojson',
+    name:         'react-map-gl GeoJSON',
+    subtitle:     'Official GeoJSON Layer example pattern',
+    icon:         <RadarChartOutlined />,
+    color:        '#2563eb',
+    tagColor:     'blue',
+    npm:          'react-map-gl + maplibre-gl',
+    version:      'v8.1 + v4.7',
+    bundle:       '~350 KB',
+    apiKey:       false,
+    tiles:        true,
+    bangla:       'Native on vector + hybrid tiles',
+    zoomLevel:    'Building (zoom 22)',
+    pros: [
+      'Follows official react-map-gl GeoJSON example exactly',
+      'Pixel-coordinate tooltip (event.point) — no Popup reprojection',
+      'MapLibre interpolate expression — smooth colour gradient',
+      'Feature-state hover — GPU-level highlight, zero React re-renders',
+      'promoteId maps GeoJSON property as stable feature ID',
+      'Free tile styles: Light, Streets, Dark, Satellite, OSM',
+      'WebGL fallback to Leaflet when GPU sandbox blocks context',
+    ],
+    cons: [
+      'Requires WebGL (GPU-disabled environments use Leaflet fallback)',
+      'MapLibre expression syntax has a learning curve',
+      'Satellite tiles (ESRI) require attribution in production',
+    ],
+    bestFor: 'GeoJSON data layers, reference implementation, feature-state interactions',
+  },
+  cluster: {
+    key:          'cluster',
+    name:         'react-map-gl Cluster',
+    subtitle:     'Official Cluster Layer example pattern · Dark style',
+    icon:         <RadarChartOutlined />,
+    color:        '#51bbd6',
+    tagColor:     'cyan',
+    npm:          'react-map-gl + maplibre-gl',
+    version:      'v8.1 + v4.7',
+    bundle:       '~350 KB',
+    apiKey:       false,
+    tiles:        true,
+    bangla:       'Via Dark Matter tile labels',
+    zoomLevel:    'Building (zoom 22)',
+    pros: [
+      'Follows official react-map-gl cluster example exactly',
+      'cluster=true on Source — MapLibre handles all aggregation on GPU',
+      'Step-coloured circles: cyan < 10, yellow < 30, pink ≥ 30',
+      'getClusterExpansionZoom() → easeTo() — smooth animated zoom-in',
+      'Dark Matter default style — high contrast for data density',
+      'Popup on individual unclustered violation points',
+      'Converts polygon GeoJSON to violation point cloud automatically',
+    ],
+    cons: [
+      'Requires WebGL (falls back to Leaflet choropleth)',
+      'Points are generated pseudo-randomly inside division bboxes',
+      'Dark style may need lightening for print / accessibility',
+    ],
+    bestFor: 'Violation density analysis, hotspot detection, drill-down exploration',
+  },
+  google: {
+    key:          'google',
+    name:         'Google Maps',
+    subtitle:     'Satellite · Hybrid · Terrain tiles',
+    icon:         <GoogleOutlined />,
+    color:        '#ea4335',
+    tagColor:     'red',
+    npm:          '@react-google-maps/api',
+    version:      'v2.x',
+    bundle:       '~200 KB + Maps SDK',
+    apiKey:       true,
+    tiles:        true,
+    bangla:       'Native on all tile types',
+    zoomLevel:    'Building (zoom 21)',
+    pros: [
+      'Best-in-class tile quality — Road, Satellite, Hybrid, Terrain',
+      'Highest zoom level (buildings, indoor at z21)',
+      'Native Bangla labels on all map types',
+      'Google Data layer loads GeoJSON natively',
+      'Most familiar UX for end users worldwide',
+      'Street View, Places, Directions API integration',
+      'GPU-accelerated rendering via WebGL',
+    ],
+    cons: [
+      'API key required (Google Cloud Console)',
+      'Paid beyond $200/month free credit (~$7 per 1000 loads)',
+      'Vendor lock-in to Google infrastructure',
+      'Government projects may require data residency review',
+      'API key must be domain-restricted in production',
+    ],
+    bestFor: 'Public-facing portals, field teams, maximum tile quality',
+  },
 };
 
 // =============================================================================
 // Comparison table data
 // =============================================================================
 const COMPARISON_COLUMNS = [
-  { title: 'Feature',         dataIndex: 'feature',  key: 'feature',  width: 180, render: (v) => <strong>{v}</strong> },
-  { title: 'React-Leaflet',   dataIndex: 'leaflet',  key: 'leaflet',  render: renderCell },
-  { title: 'ECharts Geo',     dataIndex: 'echarts',  key: 'echarts',  render: renderCell },
-  { title: 'react-simple-maps', dataIndex: 'svg',    key: 'svg',      render: renderCell },
+  { title: 'Feature',           dataIndex: 'feature', key: 'feature', width: 160, render: (v) => <strong>{v}</strong> },
+  { title: 'React-Leaflet',     dataIndex: 'leaflet', key: 'leaflet', render: renderCell },
+  { title: 'ECharts Geo',       dataIndex: 'echarts', key: 'echarts', render: renderCell },
+  { title: 'react-simple-maps', dataIndex: 'svg',     key: 'svg',     render: renderCell },
+  { title: 'react-map-gl',      dataIndex: 'mapgl',   key: 'mapgl',   render: renderCell },
+  { title: 'Google Maps',       dataIndex: 'google',  key: 'google',  render: renderCell },
+  { title: 'r-m-gl GeoJSON',   dataIndex: 'geojson', key: 'geojson', render: renderCell },
 ];
 
 function renderCell(val) {
@@ -158,17 +291,19 @@ function renderCell(val) {
 }
 
 const COMPARISON_DATA = [
-  { key: '1', feature: 'Tile layer (roads/buildings)', leaflet: true,       echarts: false,         svg: false },
-  { key: '2', feature: 'Bangla labels',               leaflet: 'Via tiles', echarts: 'label.fmt',   svg: 'Tooltip' },
-  { key: '3', feature: 'Zoom to street level',        leaflet: true,        echarts: false,         svg: false },
-  { key: '4', feature: 'Built-in legend',             leaflet: false,       echarts: true,          svg: false },
-  { key: '5', feature: 'API key required',            leaflet: false,       echarts: false,         svg: false },
-  { key: '6', feature: 'Bundle size',                 leaflet: '~90 KB',    echarts: '~1 MB',       svg: '~50 KB' },
-  { key: '7', feature: 'SVG export',                  leaflet: false,       echarts: 'PNG only',    svg: true },
-  { key: '8', feature: 'SSR compatible',              leaflet: false,       echarts: 'Partial',     svg: true },
-  { key: '9', feature: 'Smooth pan/zoom',             leaflet: true,        echarts: 'Partial',     svg: true },
-  { key: '10', feature: 'Plugin ecosystem',           leaflet: 'Huge',      echarts: 'ECharts ext', svg: 'Minimal' },
-  { key: '11', feature: 'Offline capable',            leaflet: 'With tiles',echarts: true,          svg: true },
+  { key: '1',  feature: 'Tile layer (roads/buildings)', leaflet: true,        echarts: false,        svg: false,      mapgl: true,         google: true,        geojson: true },
+  { key: '2',  feature: 'Bangla labels',                leaflet: 'Via tiles', echarts: 'label.fmt',  svg: 'Tooltip',  mapgl: 'Hybrid tile',google: 'Native',    geojson: 'Via tiles' },
+  { key: '3',  feature: 'Satellite / Hybrid view',      leaflet: false,       echarts: false,        svg: false,      mapgl: true,         google: true,        geojson: true },
+  { key: '4',  feature: 'Zoom to street level',         leaflet: true,        echarts: false,        svg: false,      mapgl: true,         google: true,        geojson: true },
+  { key: '5',  feature: 'WebGL / GPU rendering',        leaflet: false,       echarts: 'Canvas',     svg: false,      mapgl: true,         google: true,        geojson: true },
+  { key: '6',  feature: 'Feature-state hover (GPU)',    leaflet: false,       echarts: false,        svg: false,      mapgl: true,         google: false,       geojson: true },
+  { key: '7',  feature: 'Pixel-coord tooltip',          leaflet: false,       echarts: false,        svg: false,      mapgl: false,        google: false,       geojson: true },
+  { key: '8',  feature: 'API key required',             leaflet: false,       echarts: false,        svg: false,      mapgl: false,        google: true,        geojson: false },
+  { key: '9',  feature: 'Bundle size',                  leaflet: '~90 KB',    echarts: '~1 MB',      svg: '~50 KB',   mapgl: '~350 KB',    google: '~200 KB+',  geojson: '~350 KB' },
+  { key: '10', feature: 'SVG export',                   leaflet: false,       echarts: 'PNG only',   svg: true,       mapgl: false,        google: false,       geojson: false },
+  { key: '11', feature: 'SSR compatible',               leaflet: false,       echarts: 'Partial',    svg: true,       mapgl: false,        google: false,       geojson: false },
+  { key: '12', feature: 'Plugin / API ecosystem',       leaflet: 'Huge',      echarts: 'ECharts',    svg: 'Minimal',  mapgl: 'deck.gl',    google: 'Places/Dir',geojson: 'deck.gl' },
+  { key: '13', feature: 'Offline capable',              leaflet: 'PMTiles',   echarts: true,         svg: true,       mapgl: 'PMTiles',    google: false,       geojson: 'PMTiles' },
 ];
 
 // =============================================================================
@@ -321,6 +456,97 @@ const MapVisualization = () => {
             showBangla
           />
           <LibraryCard lib={LIBRARIES.svg} />
+        </div>
+      ),
+    },
+    {
+      key:   'mapgl',
+      label: (
+        <span>
+          <RadarChartOutlined style={{ marginRight: 6 }} />
+          react-map-gl
+          <Tag color="purple" style={{ marginLeft: 8, fontSize: 10 }}>MapLibre WebGL</Tag>
+        </span>
+      ),
+      children: (
+        <div>
+          <ChoroplethMapGL
+            geojson={enhancedGeoJSON}
+            title="Division Violations — react-map-gl (MapLibre GL)"
+            valueLabel="Violations"
+            nameProperty="NAME_1"
+            height="540px"
+            showBangla
+          />
+          <LibraryCard lib={LIBRARIES.mapgl} />
+        </div>
+      ),
+    },
+    {
+      key:   'google',
+      label: (
+        <span>
+          <GoogleOutlined style={{ marginRight: 6 }} />
+          Google Maps
+          <Tag color="red" style={{ marginLeft: 8, fontSize: 10 }}>Road · Satellite · Hybrid</Tag>
+        </span>
+      ),
+      children: (
+        <div>
+          <ChoroplethMapGoogle
+            geojson={enhancedGeoJSON}
+            title="Division Violations — Google Maps"
+            valueLabel="Violations"
+            nameProperty="NAME_1"
+            height="540px"
+            showBangla
+          />
+          <LibraryCard lib={LIBRARIES.google} />
+        </div>
+      ),
+    },
+    {
+      key:   'geojson',
+      label: (
+        <span>
+          <RadarChartOutlined style={{ marginRight: 6 }} />
+          GeoJSON Layer
+          <Tag color="blue" style={{ marginLeft: 8, fontSize: 10 }}>MapLibre · Official</Tag>
+        </span>
+      ),
+      children: (
+        <div>
+          <ReactMapGLGeoJSON
+            geojson={enhancedGeoJSON}
+            title="Division Violations — react-map-gl GeoJSON"
+            valueLabel="Violations"
+            nameProperty="NAME_1"
+            height="540px"
+            showBangla
+          />
+          <LibraryCard lib={LIBRARIES.geojson} />
+        </div>
+      ),
+    },
+    {
+      key:   'cluster',
+      label: (
+        <span>
+          <RadarChartOutlined style={{ marginRight: 6 }} />
+          Cluster Map
+          <Tag color="cyan" style={{ marginLeft: 8, fontSize: 10 }}>Dark · Clusters</Tag>
+        </span>
+      ),
+      children: (
+        <div>
+          <ReactMapGLCluster
+            geojson={enhancedGeoJSON}
+            title="Violation Clusters — react-map-gl"
+            valueLabel="Violations"
+            nameProperty="NAME_1"
+            height="540px"
+          />
+          <LibraryCard lib={LIBRARIES.cluster} />
         </div>
       ),
     },

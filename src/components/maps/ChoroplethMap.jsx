@@ -1,411 +1,389 @@
 /**
- * Choropleth Map Component - Metabase Style
- * Clean choropleth without background tiles, matching Metabase design
+ * ChoroplethMap — React-Leaflet
+ *
+ * Bangladesh division choropleth with real tile backgrounds.
+ * Supports 5 tile styles, each with a matching choropleth colour palette.
+ *
+ * Tile providers (all free, no API key):
+ *   Light     — CARTO Positron    + Blue sequential
+ *   Streets   — CARTO Voyager     + Warm (YlOrRd)
+ *   Dark      — CARTO Dark Matter + Green sequential
+ *   Satellite — ESRI World Imagery+ Purple sequential
+ *   OSM       — OpenStreetMap Std + Teal sequential
+ *
+ * Library: react-leaflet v5 + leaflet v1.9
+ * API key: Not required
+ *
+ * Props:
+ *   geojson       {object}   GeoJSON FeatureCollection; properties.value required
+ *   title         {string}   Map title
+ *   height        {string}   CSS height of the container
+ *   valueLabel    {string}   Metric name shown in legend and tooltip
+ *   nameProperty  {string}   GeoJSON property for English region name
+ *   onRegionClick {function} Callback (featureProperties) => void
+ *   showBangla    {boolean}  Show বাংলা name in tooltip when available
  */
 
-import React, { useEffect, useState } from 'react';
-import { MapContainer, GeoJSON, useMap } from 'react-leaflet';
+import React, { useMemo, useState } from 'react';
+import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Fix for default marker icons in Leaflet
+// Bangladesh bounding box [[SW_lat, SW_lng], [NE_lat, NE_lng]]
+// Covers all 8 divisions with a natural border margin.
+const BD_BOUNDS = [[20.34, 88.0], [26.64, 92.68]];
+
+// Fix Leaflet default marker icon path (Webpack/Vite asset hashing)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-/**
- * Component to fit map bounds
- */
-const FitBounds = ({ geojson }) => {
-  const map = useMap();
+// ── Tile styles ───────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    if (geojson && geojson.features) {
-      const geoJsonLayer = L.geoJSON(geojson);
-      const bounds = geoJsonLayer.getBounds();
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [50, 50] });
-      }
-    }
-  }, [geojson, map]);
-
-  return null;
+const MAP_STYLES = {
+  light: {
+    label:       'Light',
+    url:         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    subdomains:  'abcd',
+    maxZoom:     19,
+    // CARTO Positron = light grey base → blue choropleth sits cleanly on top
+    palette:     ['#dbeafe', '#93c5fd', '#60a5fa', '#3b82f6', '#1d4ed8'],
+    hoverColor:  '#1e40af',
+    borderColor: '#ffffff',
+    fillOpacity: 0.70,
+    isDark:      false,
+    badgeBg:     'rgba(59,130,246,0.9)',
+    legendBg:    'rgba(255,255,255,0.95)',
+    legendText:  '#333',
+    titleBg:     'rgba(255,255,255,0.95)',
+    titleText:   '#111827',
+    btnActiveBg: '#3b82f6',
+  },
+  streets: {
+    label:       'Streets',
+    url:         'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    subdomains:  'abcd',
+    maxZoom:     19,
+    // Voyager = warm beige road map → warm orange-red choropleth
+    palette:     ['#ffffb2', '#fecc5c', '#fd8d3c', '#f03b20', '#bd0026'],
+    hoverColor:  '#7f1d1d',
+    borderColor: '#fff5e6',
+    fillOpacity: 0.65,
+    isDark:      false,
+    badgeBg:     'rgba(240,59,32,0.88)',
+    legendBg:    'rgba(255,255,255,0.95)',
+    legendText:  '#333',
+    titleBg:     'rgba(255,255,255,0.95)',
+    titleText:   '#111827',
+    btnActiveBg: '#f03b20',
+  },
+  dark: {
+    label:       'Dark',
+    url:         'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    subdomains:  'abcd',
+    maxZoom:     19,
+    // Dark Matter = near-black canvas → bright green choropleth pops
+    palette:     ['#d1fae5', '#6ee7b7', '#34d399', '#059669', '#064e3b'],
+    hoverColor:  '#34d399',
+    borderColor: '#334155',
+    fillOpacity: 0.72,
+    isDark:      true,
+    badgeBg:     'rgba(5,150,105,0.9)',
+    legendBg:    'rgba(15,23,42,0.92)',
+    legendText:  '#e2e8f0',
+    titleBg:     'rgba(15,23,42,0.92)',
+    titleText:   '#e2e8f0',
+    btnActiveBg: '#059669',
+  },
+  satellite: {
+    label:       'Satellite',
+    url:         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics',
+    subdomains:  '',
+    maxZoom:     18,
+    // Satellite imagery → semi-transparent purple choropleth overlay
+    palette:     ['#f3e8ff', '#d8b4fe', '#a855f7', '#7c3aed', '#4c1d95'],
+    hoverColor:  '#c026d3',
+    borderColor: 'rgba(255,255,255,0.5)',
+    fillOpacity: 0.60,
+    isDark:      true,
+    badgeBg:     'rgba(124,58,237,0.9)',
+    legendBg:    'rgba(0,0,0,0.78)',
+    legendText:  '#e9d5ff',
+    titleBg:     'rgba(0,0,0,0.78)',
+    titleText:   '#e9d5ff',
+    btnActiveBg: '#7c3aed',
+  },
+  osm: {
+    label:       'OSM',
+    url:         'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    subdomains:  'abc',
+    maxZoom:     19,
+    // OSM standard = colourful road map → teal/cyan choropleth
+    palette:     ['#ccfbf1', '#5eead4', '#14b8a6', '#0d9488', '#134e4a'],
+    hoverColor:  '#0f766e',
+    borderColor: '#ffffff',
+    fillOpacity: 0.65,
+    isDark:      false,
+    badgeBg:     'rgba(13,148,136,0.9)',
+    legendBg:    'rgba(255,255,255,0.95)',
+    legendText:  '#333',
+    titleBg:     'rgba(255,255,255,0.95)',
+    titleText:   '#111827',
+    btnActiveBg: '#0d9488',
+  },
 };
 
-/**
- * Calculate quantile breaks for better color distribution
- */
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 const calculateQuantiles = (values, numBins = 5) => {
-  if (!values || values.length === 0) return [];
-
+  if (!values?.length) return [];
   const sorted = [...values].sort((a, b) => a - b);
-  const breaks = [];
-
-  for (let i = 1; i < numBins; i++) {
-    const index = Math.floor((sorted.length * i) / numBins);
-    breaks.push(sorted[index]);
-  }
-
-  return breaks;
+  return Array.from({ length: numBins - 1 }, (_, i) =>
+    sorted[Math.floor((sorted.length * (i + 1)) / numBins)]
+  );
 };
 
-/**
- * Get color based on value and quantile breaks (5-tier blue gradient like Metabase)
- */
-const getColorForValue = (value, breaks) => {
-  if (!breaks || breaks.length === 0) return '#93c5fd'; // light blue default
-
-  // 5-tier blue gradient (lightest to darkest)
-  const colors = [
-    '#dbeafe', // Lightest blue (0-20%)
-    '#93c5fd', // Light blue (20-40%)
-    '#60a5fa', // Medium blue (40-60%)
-    '#3b82f6', // Blue (60-80%)
-    '#1d4ed8', // Dark blue (80-100%)
-  ];
-
-  if (value <= breaks[0]) return colors[0];
-  if (value <= breaks[1]) return colors[1];
-  if (value <= breaks[2]) return colors[2];
-  if (value <= breaks[3]) return colors[3];
-  return colors[4];
+const getColor = (value, breaks, palette) => {
+  if (!breaks?.length) return palette[0];
+  const idx = breaks.findIndex((b) => value <= b);
+  return idx === -1 ? palette[palette.length - 1] : palette[idx];
 };
 
-/**
- * Format range label for legend
- */
-const formatRangeLabel = (min, max, isLast = false) => {
-  // Handle undefined/null values
-  const minVal = typeof min === 'number' ? min : parseFloat(min) || 0;
-  const maxVal = typeof max === 'number' ? max : parseFloat(max) || 0;
+const fmt = (v) =>
+  typeof v === 'number' ? (Number.isInteger(v) ? v.toString() : v.toFixed(2)) : String(v ?? 0);
 
-  if (isLast) {
-    return `${minVal.toFixed(2)} +`;
-  }
-  return `${minVal.toFixed(2)} - ${maxVal.toFixed(2)}`;
-};
+// ── TileLayer swapper — must live inside MapContainer ─────────────────────────
 
-/**
- * Choropleth Map Component - Metabase Style
- * @param {object} geojson - GeoJSON feature collection with properties.value
- * @param {string} title - Map title
- * @param {function} onRegionClick - Callback when region is clicked (feature) => {}
- * @param {string} height - Map height
- * @param {string} valueLabel - Label for the metric (e.g., "Violations", "Avg Speed")
- */
+const TileLayerSwitcher = ({ style }) => (
+  <TileLayer
+    key={style.label}          // key forces Leaflet to replace the layer
+    url={style.url}
+    attribution={style.attribution}
+    subdomains={style.subdomains || 'abc'}
+    maxZoom={style.maxZoom}
+  />
+);
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 const ChoroplethMap = ({
   geojson,
-  title = 'Regional Analysis',
+  title        = 'Regional Analysis',
+  height       = '500px',
+  valueLabel   = 'Value',
+  nameProperty = 'NAME_1',
   onRegionClick,
-  height = '500px',
-  valueLabel = 'Value',
+  showBangla   = true,
 }) => {
-  const [mapKey, setMapKey] = useState(0);
-  const [quantileBreaks, setQuantileBreaks] = useState([]);
-  const [valueRange, setValueRange] = useState({ min: 0, max: 100 });
+  const [activeStyle, setActiveStyle] = useState('light');
 
-  // Calculate quantile breaks when geojson changes
-  useEffect(() => {
-    if (geojson && geojson.features) {
-      const values = geojson.features
-        .map(f => f.properties.value)
-        .filter(v => v !== null && v !== undefined && !isNaN(v));
+  const style = MAP_STYLES[activeStyle];
 
-      console.log('🗺️ ChoroplethMap received values:', values);
+  // Key that changes only when geojson data or tile style changes.
+  // Rekeys the GeoJSON layer (not the MapContainer) so the viewport stays fixed.
+  const geojsonKey = useMemo(
+    () => `${activeStyle}-${geojson?.features?.length ?? 0}`,
+    [activeStyle, geojson]
+  );
 
-      if (values.length > 0) {
-        const breaks = calculateQuantiles(values, 5);
-        const min = Math.min(...values);
-        const max = Math.max(...values);
-
-        console.log('🗺️ Quantile breaks:', breaks);
-        console.log('🗺️ Value range:', { min, max });
-
-        setQuantileBreaks(breaks);
-        setValueRange({ min, max });
-      } else {
-        console.warn('⚠️ No valid values found in GeoJSON features');
-        // Set default values to avoid errors
-        setQuantileBreaks([0, 0, 0, 0]);
-        setValueRange({ min: 0, max: 0 });
-      }
-    }
-  }, [geojson]);
-
-  // Reload map when geojson changes
-  useEffect(() => {
-    setMapKey((prev) => prev + 1);
-  }, [geojson]);
-
-  // Style function for GeoJSON features (Metabase style)
-  const style = (feature) => {
-    const value = feature.properties.value || 0;
-    const fillColor = getColorForValue(value, quantileBreaks);
-
+  // Colour breaks
+  const { breaks, min } = useMemo(() => {
+    if (!geojson?.features) return { breaks: [], min: 0 };
+    const vals = geojson.features
+      .map((f) => f.properties.value)
+      .filter((v) => v != null && !isNaN(v));
     return {
-      fillColor: fillColor,
-      weight: 1,
-      opacity: 1,
-      color: '#ffffff', // White borders like Metabase
-      fillOpacity: 0.85,
+      breaks: calculateQuantiles(vals, 5),
+      min:    vals.length ? Math.min(...vals) : 0,
     };
-  };
+  }, [geojson]);
 
-  // Highlight feature on hover
-  const highlightFeature = (e) => {
-    const layer = e.target;
-    layer.setStyle({
-      weight: 3,
-      color: '#333',
-      fillOpacity: 1,
-    });
-    layer.bringToFront();
-  };
-
-  // Reset highlight
-  const resetHighlight = (e) => {
-    const layer = e.target;
-    layer.setStyle(style(layer.feature));
-  };
-
-  // Handle click on feature (drill-down)
-  const onFeatureClick = (feature, layer) => {
-    console.log('🗺️ Map region clicked:', feature.properties);
-    if (onRegionClick) {
-      onRegionClick(feature);
+  // Legend items
+  const legendItems = useMemo(() => {
+    if (!breaks.length) return [];
+    const fmtN = (v) => (typeof v === 'number' ? v.toFixed(1) : v);
+    const items = [{ color: style.palette[0], label: `${fmtN(min)} – ${fmtN(breaks[0])}` }];
+    for (let i = 0; i < breaks.length - 1; i++) {
+      items.push({ color: style.palette[i + 1], label: `${fmtN(breaks[i])} – ${fmtN(breaks[i + 1])}` });
     }
-  };
-
-  // Attach event listeners to each feature
-  const onEachFeature = (feature, layer) => {
-    const name = feature.properties.shapeName || feature.properties.NAME_1 || feature.properties.name || 'Unknown';
-    const value = feature.properties.value !== undefined && feature.properties.value !== null
-      ? feature.properties.value
-      : 0;
-    const rowData = feature.properties.rowData;
-
-    // Format value for display
-    const displayValue = typeof value === 'number'
-      ? (Number.isInteger(value) ? value.toString() : value.toFixed(2))
-      : value;
-
-    // Build tooltip content - show all metrics if rowData available
-    let tooltipContent;
-    if (rowData && Array.isArray(rowData) && rowData.length >= 8) {
-      // District data: [Division, District, Avg Download, Avg Upload, Avg Latency, Availability %, ISP Count, PoP Count]
-      tooltipContent = `
-        <div style="padding: 10px; font-family: sans-serif; min-width: 200px;">
-          <strong style="font-size: 14px; display: block; margin-bottom: 8px;">${name}</strong>
-          <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
-            <tr>
-              <td style="color: #666; padding: 2px 8px 2px 0;">Division:</td>
-              <td style="font-weight: 600; padding: 2px 0;">${rowData[0]}</td>
-            </tr>
-            <tr>
-              <td style="color: #666; padding: 2px 8px 2px 0;">Avg Download:</td>
-              <td style="font-weight: 600; padding: 2px 0;">${typeof rowData[2] === 'number' ? rowData[2].toFixed(2) : rowData[2]} Mbps</td>
-            </tr>
-            <tr>
-              <td style="color: #666; padding: 2px 8px 2px 0;">Avg Upload:</td>
-              <td style="font-weight: 600; padding: 2px 0;">${typeof rowData[3] === 'number' ? rowData[3].toFixed(2) : rowData[3]} Mbps</td>
-            </tr>
-            <tr>
-              <td style="color: #666; padding: 2px 8px 2px 0;">Avg Latency:</td>
-              <td style="font-weight: 600; padding: 2px 0;">${typeof rowData[4] === 'number' ? rowData[4].toFixed(2) : rowData[4]} ms</td>
-            </tr>
-            <tr>
-              <td style="color: #666; padding: 2px 8px 2px 0;">Availability:</td>
-              <td style="font-weight: 600; padding: 2px 0;">${typeof rowData[5] === 'number' ? rowData[5].toFixed(2) : rowData[5]}%</td>
-            </tr>
-            <tr>
-              <td style="color: #666; padding: 2px 8px 2px 0;">PoP Count:</td>
-              <td style="font-weight: 600; padding: 2px 0;">${rowData[7] || 0}</td>
-            </tr>
-          </table>
-        </div>`;
-    } else {
-      // Simple tooltip for division or when no rowData
-      tooltipContent = `
-        <div style="padding: 8px; font-family: sans-serif;">
-          <strong style="font-size: 14px;">${name}</strong><br/>
-          <span style="color: #666;">${valueLabel}: <strong>${displayValue}</strong></span>
-        </div>`;
-    }
-
-    // Tooltip with proper formatting
-    layer.bindTooltip(tooltipContent, {
-      permanent: false,
-      direction: 'auto',
-      className: 'custom-tooltip',
-      opacity: 0.95,
-    });
-
-    // Event listeners
-    layer.on({
-      mouseover: highlightFeature,
-      mouseout: resetHighlight,
-      click: () => onFeatureClick(feature, layer),
-    });
-  };
-
-  // Calculate legend items
-  const legendItems = React.useMemo(() => {
-    if (quantileBreaks.length === 0) return [];
-
-    const items = [];
-    const colors = [
-      '#dbeafe', '#93c5fd', '#60a5fa', '#3b82f6', '#1d4ed8'
-    ];
-
-    // First bin: min to breaks[0]
-    items.push({
-      color: colors[0],
-      label: formatRangeLabel(valueRange.min, quantileBreaks[0]),
-    });
-
-    // Middle bins
-    for (let i = 0; i < quantileBreaks.length - 1; i++) {
-      items.push({
-        color: colors[i + 1],
-        label: formatRangeLabel(quantileBreaks[i], quantileBreaks[i + 1]),
-      });
-    }
-
-    // Last bin: breaks[last] to max
-    items.push({
-      color: colors[colors.length - 1],
-      label: formatRangeLabel(quantileBreaks[quantileBreaks.length - 1], valueRange.max, true),
-    });
-
+    items.push({ color: style.palette[style.palette.length - 1], label: `${fmtN(breaks[breaks.length - 1])} +` });
     return items;
-  }, [quantileBreaks, valueRange]);
+  }, [breaks, min, style]);
 
-  if (!geojson || !geojson.features || geojson.features.length === 0) {
+  // Leaflet GeoJSON style fn — recreated when style changes
+  const featureStyle = useMemo(() => (feature) => ({
+    fillColor:   getColor(feature.properties.value ?? 0, breaks, style.palette),
+    fillOpacity: style.fillOpacity,
+    weight:      1.2,
+    opacity:     1,
+    color:       style.borderColor,
+  }), [breaks, style]);
+
+  // onEachFeature — binds tooltip and hover
+  const onEachFeature = useMemo(() => (feature, layer) => {
+    const p      = feature.properties;
+    const name   = p[nameProperty] || p.shapeName || p.name || 'Unknown';
+    const nameBn = showBangla && p.name_bn ? p.name_bn : null;
+    const label  = nameBn ? `${nameBn} (${name})` : name;
+    const value  = p.value ?? 0;
+
+    layer.bindTooltip(`
+      <div style="padding:8px 12px;font-family:'Noto Serif Bengali',sans-serif;min-width:130px;">
+        <strong style="font-size:13px;display:block;margin-bottom:4px;">${label}</strong>
+        <span style="font-size:11px;opacity:0.75;font-family:sans-serif;">${valueLabel}: </span>
+        <strong style="font-size:12px;font-family:sans-serif;">${fmt(value)}</strong>
+      </div>`, {
+      permanent:  false,
+      direction:  'auto',
+      opacity:    0.97,
+    });
+
+    layer.on({
+      mouseover(e) {
+        e.target.setStyle({
+          weight:      3,
+          color:       style.hoverColor,
+          fillOpacity: Math.min(style.fillOpacity + 0.18, 0.95),
+        });
+        e.target.bringToFront();
+      },
+      mouseout(e) {
+        e.target.setStyle(featureStyle(feature));
+      },
+      click() {
+        onRegionClick?.(p);
+      },
+    });
+  }, [nameProperty, showBangla, valueLabel, style, featureStyle, onRegionClick]);
+
+  if (!geojson?.features?.length) {
     return (
-      <div
-        style={{
-          height,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px solid #d9d9d9',
-          borderRadius: '4px',
-          background: '#f5f5f5',
-        }}
-      >
-        <div style={{ textAlign: 'center', color: '#999' }}>
-          <p>No geographic data available</p>
-        </div>
+      <div style={{
+        height, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        border: '1px solid #d9d9d9', borderRadius: 6, background: '#f5f5f5',
+      }}>
+        <p style={{ color: '#999' }}>No geographic data available</p>
       </div>
     );
   }
 
   return (
-    <div style={{ position: 'relative', height, border: '1px solid #d9d9d9', borderRadius: '4px', overflow: 'hidden' }}>
+    <div style={{
+      position: 'relative', height,
+      border: `1px solid ${style.isDark ? '#334155' : '#d9d9d9'}`,
+      borderRadius: 6, overflow: 'hidden',
+    }}>
+
+      {/* ── Title ────────────────────────────────────────────────── */}
       {title && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 10,
-            left: 10,
-            zIndex: 1000,
-            background: 'rgba(255, 255, 255, 0.95)',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            fontWeight: '600',
-            fontSize: '14px',
-          }}
-        >
+        <div style={{
+          position: 'absolute', top: 10, left: 10, zIndex: 1000,
+          background: style.titleBg,
+          padding: '7px 14px', borderRadius: 5,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+          fontWeight: 600, fontSize: 13, color: style.titleText,
+        }}>
           {title}
         </div>
       )}
 
-      <MapContainer
-        key={mapKey}
-        center={[23.8103, 90.4125]} // Center of Bangladesh
-        zoom={7}
-        style={{
-          height: '100%',
-          width: '100%',
-          background: '#f8f9fa', // Light gray background (no tiles)
-        }}
-        scrollWheelZoom={true}
-        zoomControl={true}
-        attributionControl={false} // Hide Leaflet attribution
-      >
-        {/* NO TileLayer - clean choropleth like Metabase */}
+      {/* ── Style switcher — top-right ────────────────────────────── */}
+      <div style={{
+        position: 'absolute', top: 10, right: 10, zIndex: 1000,
+        display: 'flex', gap: 4,
+      }}>
+        {Object.entries(MAP_STYLES).map(([key, s]) => {
+          const active = activeStyle === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setActiveStyle(key)}
+              style={{
+                padding:    '5px 10px',
+                fontSize:   11,
+                fontWeight: 600,
+                border:     'none',
+                borderRadius: 4,
+                cursor:     'pointer',
+                background: active
+                  ? s.btnActiveBg
+                  : style.isDark
+                    ? 'rgba(30,41,59,0.92)'
+                    : 'rgba(255,255,255,0.92)',
+                color: active
+                  ? '#fff'
+                  : style.isDark ? '#cbd5e1' : '#374151',
+                boxShadow:  '0 1px 4px rgba(0,0,0,0.22)',
+                transition: 'background 0.15s',
+              }}
+            >
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
 
-        {geojson && (
-          <>
-            <GeoJSON
-              data={geojson}
-              style={style}
-              onEachFeature={onEachFeature}
-            />
-            <FitBounds geojson={geojson} />
-          </>
-        )}
+      {/* ── Leaflet map ───────────────────────────────────────────── */}
+      <MapContainer
+        // Static bounds = Bangladesh bbox. MapContainer never remounts so the
+        // viewport is stable — switching tiles or reloading GeoJSON won't pan/zoom.
+        bounds={BD_BOUNDS}
+        boundsOptions={{ padding: [14, 14] }}
+        style={{ height: '100%', width: '100%' }}
+        scrollWheelZoom
+        zoomControl
+        attributionControl
+      >
+        {/* Tile layer — key forces Leaflet to swap it when style changes */}
+        <TileLayerSwitcher style={style} />
+
+        {/* Choropleth overlay — rekeyed on data/style change, MapContainer stays */}
+        <GeoJSON
+          key={geojsonKey}
+          data={geojson}
+          style={featureStyle}
+          onEachFeature={onEachFeature}
+        />
       </MapContainer>
 
-      {/* Legend - Metabase style with value ranges */}
+      {/* ── Legend ───────────────────────────────────────────────── */}
       {legendItems.length > 0 && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 20,
-            left: 20,
-            zIndex: 1000,
-            background: 'rgba(255, 255, 255, 0.95)',
-            padding: '12px',
-            borderRadius: '4px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            fontSize: '11px',
-          }}
-        >
-          <div style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '12px', color: '#333' }}>
+        <div style={{
+          position: 'absolute', bottom: 32, left: 10, zIndex: 1000,
+          background: style.legendBg,
+          padding: '10px 12px', borderRadius: 5,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)', fontSize: 11,
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, color: style.legendText, fontSize: 11 }}>
             {valueLabel}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {legendItems.map((item, index) => (
-              <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
-                  style={{
-                    width: 20,
-                    height: 15,
-                    background: item.color,
-                    border: '1px solid #ccc',
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ color: '#666', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                  {item.label}
-                </span>
-              </div>
-            ))}
-          </div>
+          {legendItems.map((item, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
+              <div style={{
+                width: 18, height: 13, background: item.color,
+                border: '1px solid rgba(0,0,0,0.15)', borderRadius: 2, flexShrink: 0,
+              }} />
+              <span style={{ color: style.legendText, whiteSpace: 'nowrap' }}>{item.label}</span>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Click instruction hint */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 10,
-          right: 10,
-          zIndex: 1000,
-          background: 'rgba(59, 130, 246, 0.9)',
-          color: 'white',
-          padding: '6px 12px',
-          borderRadius: '4px',
-          fontSize: '11px',
-          fontWeight: '500',
-        }}
-      >
-        Click region to drill-down
+      {/* ── Library badge ─────────────────────────────────────────── */}
+      <div style={{
+        position: 'absolute', bottom: 10, right: 10, zIndex: 1000,
+        background: style.badgeBg, color: '#fff',
+        padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500,
+      }}>
+        Leaflet · {style.label} · react-leaflet v5
       </div>
     </div>
   );
